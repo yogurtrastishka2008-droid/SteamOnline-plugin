@@ -1,27 +1,27 @@
-# Steam Online Tracker (Millennium Plugin)
+# Steam Online Tracker
 
-A beautiful, seamless Millennium plugin that displays the current number of online players for any game directly in your Steam Library.
+Привет! 👋 Это небольшой, но очень полезный плагин для [Millennium](https://millennium.web.app/), который показывает актуальный онлайн игроков прямо в твоей библиотеке Steam. 
 
-## ✨ Features
-- **Live Player Count:** Fetches the exact number of players currently in-game via the official Steam API.
-- **Premium UI:** Injects a beautiful, glassmorphic badge into the bottom-right corner of the game's hero banner.
-- **Steam Native Design:** Matches Steam's dark mode aesthetics with subtle hover animations and a glowing "online" indicator.
-- **100% Safe & Silent:** Uses zero-footprint web techniques (JSONP) and a silent background fetcher fallback to completely bypass Steam's internal Content Security Policy without triggering any console windows. No risk of VAC bans.
+Больше не нужно открывать SteamDB или лезть в центры сообщества, чтобы узнать, жив ли мультиплеер в игре или стоит ли её вообще скачивать. Просто кликаешь на игру — и видишь, сколько человек в ней прямо сейчас.
 
-## 📦 Installation
+## 🎯 Главные фишки
 
-1. Make sure you have [Millennium for Steam](https://millennium.web.app/) installed.
-2. Download the latest release of `steam-millennium-online`.
-3. Extract the folder into your Millennium plugins directory:
-   - Windows: `C:\Program Files (x86)\Steam\millennium\plugins\`
-4. Restart Steam.
-5. Go to your Library, click on any game, and look at the bottom right of the banner!
+- **Выглядит как родной:** Мы заморочились с дизайном. Плашка с онлайном аккуратно встраивается в правый нижний угол большого баннера игры. Полупрозрачный фон, красивое размытие (glassmorphism), приятные анимации при наведении — выглядит так, будто это сделали сами Valve.
+- **Работает незаметно:** Никаких всплывающих чёрных окон консоли или лагов. Плагин берет цифры напрямую с официальных серверов Steam и аккуратно кэширует их на 5 минут, чтобы библиотека работала так же быстро, как и раньше.
+- **Полностью безопасно:** За это **не дадут VAC-бан**. Плагин меняет только интерфейс самой библиотеки Steam (рисует картинки и текст) и абсолютно никак не трогает античит или файлы самих игр.
 
-## 🛠️ How it works
-Steam's built-in browser (CEF) has a strict Content Security Policy (CSP). To bypass this safely:
-1. The plugin first attempts to fetch data via JSONP (injecting a temporary script tag) to avoid CORS and CSP blocking.
-2. If Steam blocks the script, the plugin seamlessly falls back to the Millennium Lua backend.
-3. The Lua backend executes a completely hidden VBScript that runs `curl.exe` to fetch the data directly from the Steam API, ensuring no black console windows ever flash on your screen.
+## 📦 Как установить
 
-## 📝 License
-MIT License
+1. Убедись, что у тебя уже установлен [Millennium для Steam](https://millennium.web.app/).
+2. Скачай этот плагин (можно забрать готовый архив из релизов или просто скачать папку).
+3. Закинь скачанную папку в директорию плагинов Millennium:
+   - Обычно это здесь: `C:\Program Files (x86)\Steam\millennium\plugins\`
+   - *Важно: если скачиваешь архивом, убедись, что внутри папки `plugins` лежит папка плагина (например `SteamOnline-plugin`), а уже внутри неё — файлы.*
+4. Перезапусти Steam.
+5. Готово! Заходи в библиотеку, выбирай любую игру и смотри на онлайн в правом нижнем углу баннера.
+
+## 🛠 Немного для гиков (как это работает)
+Steam сильно ограничивает запросы из своего внутреннего браузера (строгий CSP и CORS). Чтобы обойти это без костылей и сторонних серверов, плагин сначала пытается получить данные через JSONP (инъекцию скрипта). Если Steam упирается — в дело вступает написанный на Lua бэкенд, который вызывает скрытый VBScript, бесшумно дёргающий `curl.exe`. Итог: данные получены, а пользователь даже ничего не заметил.
+
+---
+Наслаждайся! Если плагин понравился — буду рад звёздочке на GitHub. ⭐
