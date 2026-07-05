@@ -3,7 +3,5 @@
   "name": "steam-millennium-online",
   "common_name": "Steam Online Tracker",
   "description": "Показывает актуальный онлайн игроков",
-  "version": "1.0.0",
-  "backendType": "python",
-  "main": "backend/main.py"
+  "version": "1.0.0"
 }
