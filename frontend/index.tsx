@@ -79,6 +79,99 @@ export default definePlugin(() => {
   };
 });
 
+// Helper to extract AppID from the page
+function getAppIdFromPage(doc: Document): string | null {
+  const mng = (window as any).MainWindowBrowserManager;
+  const path = mng?.m_lastLocation?.pathname || '';
+  const match = path.match(/\/app\/(\d+)/);
+  if (match) return match[1];
+
+  const images = Array.from(doc.querySelectorAll('img')) as HTMLImageElement[];
+  for (const img of images) {
+    const src = img.src || '';
+    const m2 = src.match(/librarycache\/(\d+)_(?:library_hero|logo|header|icon)/i) || 
+               src.match(/\/(?:apps|assets)\/(\d+)\//i) ||
+               src.match(/steamloopback\.host\/images\/(?:\w+\/)?(\d+)\//i);
+    if (m2) return m2[1];
+  }
+  return null;
+}
+
+// Helper to remove badges from other games
+function cleanupOldBadges(doc: Document, currentAppId: string) {
+  const badges = Array.from(doc.querySelectorAll('.steam-online-premium-badge'));
+  badges.forEach(b => {
+      if (b.id !== 'steam-online-badge-' + currentAppId) {
+          b.remove();
+      }
+  });
+}
+
+// Helper to find the hero banner image
+function findHeroImage(doc: Document, appId: string): HTMLImageElement | undefined {
+  const images = Array.from(doc.querySelectorAll('img')) as HTMLImageElement[];
+  return images.find(img => img.src.includes(appId) && img.clientWidth > 200);
+}
+
+// Helper to inject the CSS keyframes for the spinner
+function injectGlobalStyles(doc: Document) {
+  if (!doc.getElementById('steam-online-spinner-style')) {
+      const style = doc.createElement('style');
+      style.id = 'steam-online-spinner-style';
+      style.textContent = `@keyframes steam-online-spin { to { transform: rotate(360deg); } }`;
+      doc.head.appendChild(style);
+  }
+}
+
+// Helper to create the badge element with styling
+function createBadge(doc: Document, appId: string): HTMLDivElement {
+  const badge = doc.createElement('div');
+  badge.id = 'steam-online-badge-' + appId;
+  badge.className = 'steam-online-premium-badge';
+  
+  Object.assign(badge.style, {
+    position: 'absolute',
+    bottom: '20px',
+    right: '20px',
+    zIndex: '100',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    background: 'rgba(0, 0, 0, 0.6)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '6px',
+    color: '#fff',
+    fontWeight: '500',
+    fontSize: '14px',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+    transition: 'all 0.2s ease'
+  });
+  
+  badge.onmouseenter = () => { badge.style.background = 'rgba(0, 0, 0, 0.8)'; };
+  badge.onmouseleave = () => { badge.style.background = 'rgba(0, 0, 0, 0.6)'; };
+  
+  return badge;
+}
+
+// Helper to update badge states
+function setBadgeState(badge: HTMLElement, state: 'loading' | 'loaded' | 'error', count?: number) {
+  if (state === 'loading') {
+    badge.innerHTML = `
+      <div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: steam-online-spin 1s linear infinite;"></div>
+      Загрузка...
+    `;
+  } else if (state === 'loaded' && count !== undefined) {
+    badge.innerHTML = `
+        <div style="width: 8px; height: 8px; background: #16c60c; border-radius: 50%; box-shadow: 0 0 8px #16c60c;"></div>
+        В игре: ${formatNumber(count)}
+    `;
+  } else if (state === 'error') {
+    badge.innerHTML = `Ошибка`;
+  }
+}
+
 // Using Millennium's window creation hook to inject UI
 Millennium.AddWindowCreateHook?.((context: any) => {
     try {
@@ -88,113 +181,49 @@ Millennium.AddWindowCreateHook?.((context: any) => {
 
       const checkPage = async () => {
         try {
-          const divsCount = doc.querySelectorAll('div').length;
-          if (divsCount < 100) return;
+          // Wait for React to hydrate the page
+          if (doc.querySelectorAll('div').length < 100) return;
 
-          let appId = null;
-          
-          // Try to get appId from global window object
-          const mng = (window as any).MainWindowBrowserManager;
-          const path = mng?.m_lastLocation?.pathname || '';
-          const match = path.match(/\/app\/(\d+)/);
-          if (match) {
-             appId = match[1];
-          } else {
-             // Fallback: check images
-             const images = doc.querySelectorAll('img');
-             for (const img of Array.from(images)) {
-                const src = img.src || '';
-                const m2 = src.match(/librarycache\/(\d+)_(?:library_hero|logo|header|icon)/i) || 
-                           src.match(/\/(?:apps|assets)\/(\d+)\//i) ||
-                           src.match(/steamloopback\.host\/images\/(?:\w+\/)?(\d+)\//i);
-                if (m2) {
-                    appId = m2[1];
-                    break;
-                }
-             }
-          }
-
-          // Remove old badges from other games
-          const existingBadges = doc.querySelectorAll('.steam-online-premium-badge');
-          existingBadges.forEach(b => {
-              if (b.id !== 'steam-online-badge-' + appId) {
-                  b.remove();
-              }
-          });
-
+          const appId = getAppIdFromPage(doc);
           if (!appId) return;
+
+          cleanupOldBadges(doc, appId);
 
           let badge = doc.getElementById('steam-online-badge-' + appId);
           if (!badge) {
-            // Find the hero image (usually the largest image on the page)
-            const heroImg = Array.from(doc.querySelectorAll('img')).find(img => img.src.includes(appId!) && img.clientWidth > 200);
-            if (!heroImg) return;
-            
-            const container = heroImg.parentElement;
+            const heroImg = findHeroImage(doc, appId);
+            const container = heroImg?.parentElement;
             if (!container) return;
             
-            if (window.getComputedStyle(container).position === 'static') {
+            if (win.getComputedStyle(container).position === 'static') {
                 container.style.position = 'relative';
             }
 
-            badge = doc.createElement('div');
-            badge.id = 'steam-online-badge-' + appId;
-            badge.className = 'steam-online-premium-badge';
-            badge.style.position = 'absolute';
-            badge.style.bottom = '20px';
-            badge.style.right = '20px';
-            badge.style.zIndex = '100';
-            badge.style.display = 'flex';
-            badge.style.alignItems = 'center';
-            badge.style.gap = '8px';
-            badge.style.padding = '8px 16px';
-            badge.style.background = 'rgba(0, 0, 0, 0.6)';
-            badge.style.backdropFilter = 'blur(10px)';
-            badge.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-            badge.style.borderRadius = '6px';
-            badge.style.color = '#fff';
-            badge.style.fontWeight = '500';
-            badge.style.fontSize = '14px';
-            badge.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
-            badge.style.transition = 'all 0.2s ease';
-            
-            badge.onmouseenter = () => { badge!.style.background = 'rgba(0, 0, 0, 0.8)'; };
-            badge.onmouseleave = () => { badge!.style.background = 'rgba(0, 0, 0, 0.6)'; };
-
+            badge = createBadge(doc, appId);
             container.appendChild(badge);
           }
           
           if (badge.getAttribute('data-loaded') !== 'true') {
-            badge.innerHTML = `
-              <div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-              Загрузка...
-            `;
+            badge.setAttribute('data-loaded', 'true'); // Set immediately to prevent duplicate fetches
             
-            // Add keyframes if not exists
-            if (!doc.getElementById('steam-online-spinner-style')) {
-                const style = doc.createElement('style');
-                style.id = 'steam-online-spinner-style';
-                style.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
-                doc.head.appendChild(style);
-            }
+            injectGlobalStyles(doc);
+            setBadgeState(badge, 'loading');
 
             const count = await fetchOnlinePlayers(appId);
             if (count !== null) {
-              badge.setAttribute('data-loaded', 'true');
-              badge.innerHTML = `
-                  <div style="width: 8px; height: 8px; background: #16c60c; border-radius: 50%; box-shadow: 0 0 8px #16c60c;"></div>
-                  В игре: ${formatNumber(count)}
-              `;
+              setBadgeState(badge, 'loaded', count);
             } else {
-              badge.innerHTML = `Ошибка`;
+              setBadgeState(badge, 'error');
             }
           }
-        } catch (e: any) {
+        } catch (e) {
+          // Ignore DOM/network errors to prevent console spam
         }
       };
 
-      setInterval(checkPage, 1000);
+      win.setInterval(checkPage, 1000);
 
-    } catch (err: any) {
+    } catch (err) {
+      // Ignore hook setup errors
     }
 });
