@@ -11,55 +11,21 @@ async function fetchOnlinePlayers(appId: string): Promise<number | null> {
     }
   }
 
-  return new Promise<number | null>((resolve) => {
-    const cbName = 'steam_online_' + appId + '_' + Math.floor(Math.random() * 100000);
-    
-    const timeout = setTimeout(() => {
-      cleanup();
-      resolve(null);
-    }, 5000);
-
-    const cleanup = () => {
-      delete (window as any)[cbName];
-      document.getElementById(cbName)?.remove();
-      clearTimeout(timeout);
-    };
-
-    (window as any)[cbName] = (data: any) => {
-      cleanup();
-      if (data?.response?.result === 1) {
-        const count = data.response.player_count;
-        onlineCache.set(appId, { count, timestamp: Date.now() });
-        resolve(count);
-      } else {
-        resolve(null);
-      }
-    };
-
-    const script = document.createElement('script');
-    script.id = cbName;
-    script.src = `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${appId}&jsonp=${cbName}`;
-    script.onerror = () => {
-      cleanup();
-      
-      const getOnline = callable<[{ appId: string }], string>("get_online_players");
-      getOnline({ appId }).then(resultStr => {
-        if (resultStr && resultStr !== "{}") {
-           const data = JSON.parse(resultStr);
-           if (data?.response?.result === 1) {
-              const count = data.response.player_count;
-              onlineCache.set(appId, { count, timestamp: Date.now() });
-              resolve(count);
-              return;
-           }
-        }
-        resolve(null);
-      }).catch(e => {
-        resolve(null);
-      });
-    };
-    document.head.appendChild(script);
-  });
+  try {
+    const getOnline = callable<[{ appId: string }], string>("get_online_players");
+    const resultStr = await getOnline({ appId });
+    if (resultStr && resultStr !== "{}") {
+       const data = JSON.parse(resultStr);
+       if (data?.response?.result === 1) {
+          const count = data.response.player_count;
+          onlineCache.set(appId, { count, timestamp: Date.now() });
+          return count;
+       }
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return null;
 }
 
 function formatNumber(num: number): string {
@@ -179,14 +145,28 @@ Millennium.AddWindowCreateHook?.((context: any) => {
       const win = context.m_popup;
       const doc = win.document as Document;
 
+      let lastAppId: string | null = null;
+      let intervalId: any = null;
+
       const checkPage = async () => {
         try {
+          const appId = getAppIdFromPage(doc);
+          if (!appId) {
+             lastAppId = null;
+             return;
+          }
+
+          if (appId === lastAppId) {
+             // If we're on the same game page and the badge is already injected, do nothing.
+             if (doc.getElementById('steam-online-badge-' + appId)) {
+                 return; 
+             }
+          }
+
           // Wait for React to hydrate the page
           if (doc.querySelectorAll('div').length < 100) return;
-
-          const appId = getAppIdFromPage(doc);
-          if (!appId) return;
-
+          
+          lastAppId = appId;
           cleanupOldBadges(doc, appId);
 
           let badge = doc.getElementById('steam-online-badge-' + appId);
@@ -204,7 +184,7 @@ Millennium.AddWindowCreateHook?.((context: any) => {
           }
           
           if (badge.getAttribute('data-loaded') !== 'true') {
-            badge.setAttribute('data-loaded', 'true'); // Set immediately to prevent duplicate fetches
+            badge.setAttribute('data-loaded', 'true');
             
             injectGlobalStyles(doc);
             setBadgeState(badge, 'loading');
@@ -221,7 +201,12 @@ Millennium.AddWindowCreateHook?.((context: any) => {
         }
       };
 
-      win.setInterval(checkPage, 1000);
+      intervalId = win.setInterval(checkPage, 1000);
+      
+      // Prevent interval leaks when window unloads
+      win.addEventListener('unload', () => {
+         if (intervalId) win.clearInterval(intervalId);
+      });
 
     } catch (err) {
       // Ignore hook setup errors
