@@ -1,15 +1,19 @@
-function get_online_players(args)
-    local appId = args.appId
+local millennium = require("millennium")
 
-    -- 1. ЖЕСТКАЯ ВАЛИДАЦИЯ (Sanitization)
-    -- Пропускаем ТОЛЬКО строку, состоящую исключительно из цифр (от 1 до 7+ символов)
-    if type(appId) ~= "string" or not appId:match("^%d+$") then
+function get_online_players(params)
+    -- Извлекаем appId в зависимости от формата (иногда приходит как объект, иногда как строка)
+    local appId = type(params) == "table" and params.appId or params
+
+    -- 1. ЖЕСТКАЯ ВАЛИДАЦИЯ
+    if type(appId) ~= "string" and type(appId) ~= "number" then return '{"error": "Security: Invalid AppID"}' end
+    appId = tostring(appId)
+    if not appId:match("^%d+$") then
         return '{"error": "Security: Invalid AppID format"}'
     end
 
     local url = "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=" .. appId
 
-    -- 2. ПОПЫТКА НАТИВНОГО HTTP (без внешних процессов)
+    -- 2. ПОПЫТКА НАТИВНОГО HTTP
     local has_ssl, https = pcall(require, "ssl.https")
     if has_ssl then
         local body, code = https.request(url)
@@ -18,9 +22,7 @@ function get_online_players(args)
         end
     end
 
-    -- 3. БЕЗОПАСНЫЙ ФОЛБЭК (io.popen)
-    -- Поскольку appId прошел жесткую валидацию (^%d+$), command injection здесь математически невозможен.
-    -- Вызов curl.exe в фоне без оберток VBScript.
+    -- 3. БЕЗОПАСНЫЙ ФОЛБЭК
     local handle = io.popen('curl.exe -s "' .. url .. '"')
     if handle then
         local result = handle:read("*a")
@@ -31,6 +33,16 @@ function get_online_players(args)
     return '{"error": "Failed to fetch"}'
 end
 
-_G.Plugin = {
+-- Регистрация функции для вызова с фронтенда
+_G.get_online_players = get_online_players
+if not _G.Plugin then _G.Plugin = {} end
+_G.Plugin.get_online_players = get_online_players
+
+local function on_load()
+    millennium.ready()
+end
+
+return {
+    on_load = on_load,
     get_online_players = get_online_players
 }
