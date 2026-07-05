@@ -1,0 +1,5 @@
+node_modules/
+.millennium/
+*.log
+out_*.txt
+*.zip
