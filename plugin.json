@@ -3,5 +3,7 @@
   "name": "steam-millennium-online",
   "common_name": "Steam Online Tracker",
   "description": "Показывает актуальный онлайн игроков",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "backendType": "lua",
+  "main": "backend/main.lua"
 }
