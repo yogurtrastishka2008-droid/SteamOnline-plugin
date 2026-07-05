@@ -12,17 +12,10 @@ async function fetchOnlinePlayers(appId: string): Promise<number | null> {
   }
 
   try {
-    const url = `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${appId}`;
-    let response = await fetch(url).catch(() => null);
-    
-    // Fallback to CORS proxy if direct fetch is blocked by CSP
-    if (!response || !response.ok) {
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-        response = await fetch(proxyUrl);
-    }
-    
-    if (response && response.ok) {
-       const data = await response.json();
+    const getOnline = callable<[{ appId: string }], string>("get_online_players");
+    const resultStr = await getOnline({ appId });
+    if (resultStr && resultStr !== "{}") {
+       const data = JSON.parse(resultStr);
        if (data?.response?.result === 1) {
           const count = data.response.player_count;
           onlineCache.set(appId, { count, timestamp: Date.now() });
